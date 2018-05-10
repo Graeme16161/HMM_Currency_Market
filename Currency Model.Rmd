@@ -1,0 +1,56 @@
+---
+title: "Currency Market HMM"
+author: "Graeme Keleher"
+date: "April 24, 2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Load Needed Packages
+```{r message=FALSE, warning=FALSE}
+library(depmixS4)
+library(quantmod)
+library(tidyverse)
+```
+#Load Data 
+```{r message=FALSE, warning=FALSE}
+EURUSD1d = read_csv("EURUSD1d.csv", 
+    col_types = cols(`Open Timestamp` = col_datetime(format = "%Y.%m.%d %H:%M:%S")))
+```
+
+#Turn into Time Series Data
+```{r}
+DateTS= EURUSD1d$`Open Timestamp`
+TSData=data.frame(EURUSD1d[,2:5],row.names=DateTS)
+TSData=as.xts(TSData) 
+ATRindicator=ATR(TSData[,2:4],n=14)
+ATR=ATRindicator[,2] 
+LogReturns = log(TSData$Close) - log(TSData$Open) 
+ModelData=data.frame(LogReturns,ATR)
+ModelData=ModelData[-c(1:14),]
+colnames(ModelData)=c("LogReturns","ATR") 
+```
+
+#Build the HMM
+```{r}
+HMM=depmix(list(LogReturns~1,ATR~1),data=ModelData,nstates=3,family=list(gaussian(),gaussian())) 
+HMMfit=fit(HMM, verbose = FALSE) 
+print(HMMfit)
+```
+#Plot State Probabilities
+```{r}
+HMMpost=posterior(HMMfit) 
+
+HMMpost = tibble::rowid_to_column(HMMpost, "ID")
+
+pro = HMMpost %>%
+  select(-state)%>%
+  gather(state,prob,2:4)
+
+ggplot(data = pro, aes(x = ID, y= prob, color = state)) + geom_line(size = 2) + 
+  labs(title = "Probabilities of States Through Time",y = "Probability",x ="Time")
+```
+
